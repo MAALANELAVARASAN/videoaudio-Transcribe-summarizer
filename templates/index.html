@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Audio Recorder & Transcriber</title>
+    <style>
+        body {
+            text-align: center;
+            font-family: Arial, sans-serif;
+        }
+        .container {
+            margin-top: 20px;
+        }
+        .video-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin-bottom: 20px;
+            width: 640px;
+            height: 480px;
+            border: 2px solid black;
+            background-color: #000;
+        }
+        video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        button {
+            padding: 10px 20px;
+            margin: 10px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+        #timer {
+            font-size: 24px;
+            font-weight: bold;
+            margin-top: 20px;
+        }
+        #transcription, #summary {
+            white-space: pre-wrap;
+            margin-top: 20px;
+            border: 1px solid black;
+            padding: 10px;
+            width: 60%;
+            display: inline-block;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Audio Recorder & Transcriber</h1>
+
+    <!-- Video Container for Webcam Feed -->
+    <div class="video-container">
+        <video id="recordedVideo" width="640" height="480" controls>
+            <img src="{{ url_for('video_feed') }}" width="640" height="480" alt="Video Stream">
+            Your browser does not support the video tag.
+        </video>
+        <button onclick="window.location.href='/download_video'">Download Video</button>
+        
+    </div>
+
+    <div class="container">
+        <button onclick="startRecording()">Start Recording</button>
+        <button onclick="stopRecording()">Stop Recording</button>
+        <button onclick="downloadAudio()">Download Audio</button>
+        <button onclick="transcribeAudio()">Transcribe</button>
+        <button onclick="summarizeText()">Summarize</button>
+    </div>
+
+    <h2>Timer</h2>
+    <div id="timer">2:00</div>
+
+    <h2>Transcription</h2>
+    <div id="transcription">Your transcription will appear here...</div>
+
+    <h2>Summary</h2>
+    <div id="summary">Your summary will appear here...</div>
+
+    <!-- Buzzer Sound -->
+    <audio id="buzzer" src="static/buzzer.mp3"></audio>
+
+    <script>
+        let countdown;
+        let timeLeft = 120; // 2 minutes
+        let isRecording = false;
+
+        function startRecording() {
+            fetch('/start', { method: 'POST' })
+                .then(response => response.json())
+                .then(data => {
+                    alert(data.message);
+                    if (!isRecording) {
+                        isRecording = true;
+                        startTimer();
+                    }
+                });
+        }
+
+        function stopRecording() {
+            fetch('/stop', { method: 'POST' })
+                .then(response => response.json())
+                .then(data => {
+                    alert(data.message);
+                    clearInterval(countdown);
+                    document.getElementById('timer').innerText = "2:00";
+                    timeLeft = 120;
+                    isRecording = false;
+                });
+        }
+
+        function downloadAudio() {
+            window.location.href = "/download_audio";
+        }
+
+        function transcribeAudio() {
+            fetch('/transcribe', { method: 'POST' })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.transcription) {
+                        document.getElementById('transcription').innerText = data.transcription;
+                    } else {
+                        alert(data.error);
+                    }
+                });
+        }
+
+        function summarizeText() {
+            const transcriptionText = document.getElementById('transcription').innerText;
+            if (transcriptionText === "Your transcription will appear here...") {
+                alert("Please transcribe first!");
+                return;
+            }
+
+            fetch('/summarize', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ text: transcriptionText })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.summary) {
+                    document.getElementById('summary').innerText = data.summary;
+                } else {
+                    alert(data.error);
+                }
+            });
+        }
+
+        function startTimer() {
+            clearInterval(countdown);
+            countdown = setInterval(() => {
+                if (timeLeft > 0) {
+                    timeLeft--;
+                    let minutes = Math.floor(timeLeft / 60);
+                    let seconds = timeLeft % 60;
+                    document.getElementById('timer').innerText = `${minutes}:${seconds < 10 ? '0' + seconds : seconds}`;
+
+                    // Show warning when 10 seconds are left
+                    if (timeLeft === 10) {
+                        alert("Warning: 10 seconds remaining!");
+                    }
+                } else {
+                    clearInterval(countdown);
+                    document.getElementById('timer').innerText = "Time's Up!";
+                    document.getElementById('buzzer').play(); // Play buzzer sound
+                    stopRecording(); // Automatically stop recording
+                }
+            }, 1000);
+        }
+
+        // Display the webcam stream in the video element
+        async function startWebcam() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                const videoElement = document.getElementById('videoFeed');
+                videoElement.srcObject = stream;
+            } catch (error) {
+                console.error("Error accessing webcam:", error);
+                alert("Could not access webcam. Please allow camera permissions.");
+            }
+        }
+
+        // Start webcam on page load
+        window.onload = startWebcam;
+    </script>
+
+</body>
+</html>
